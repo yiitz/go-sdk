@@ -205,9 +205,9 @@ func DialContextSMChannel(rawurl, caFile, certFile, keyFile string, groupID int)
 		// log.Println(err)
 		return nil, err
 	}
-	config := &gmtls.Config{RootCAs: roots, Certificates: []gmtls.Certificate{cer}, MinVersion: gmtls.VersionTLS12, PreferServerCipherSuites: true,
+	config := &gmtls.Config{RootCAs: roots, Certificates: []gmtls.Certificate{cer}, MinVersion: gmtls.VersionTLS10, PreferServerCipherSuites: true,
 		InsecureSkipVerify: true}
-	config.CurvePreferences = append(config.CurvePreferences, gmtls.X25519, gmtls.CurveP256, gmtls.CurveP384, gmtls.CurveP521, gmtls.CureP256SM2)
+	config.CurvePreferences = append(config.CurvePreferences, gmtls.CurveP256, gmtls.CurveP384, gmtls.CurveP521, gmtls.CureP256SM2, gmtls.X25519)
 	return DialSMChannelWithClient(rawurl, config, groupID)
 }
 
