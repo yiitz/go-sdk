@@ -26,6 +26,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/big"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -36,6 +37,7 @@ import (
 	"github.com/FISCO-BCOS/go-sdk/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
+	"github.com/tjfoc/gmtls"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -54,7 +56,7 @@ type nodeInfo struct {
 
 type channelSession struct {
 	// groupID   uint
-	c         *tls.Conn
+	c         net.Conn
 	mu        sync.RWMutex
 	responses map[string]*channelResponse
 	// receiptsMutex sync.Mutex
@@ -70,7 +72,7 @@ type channelSession struct {
 	closeOnce           sync.Once
 	closed              chan interface{}
 	endpoint            string
-	tlsConfig           *tls.Config
+	dialFunc            func() (net.Conn, error)
 }
 
 const (
@@ -331,7 +333,10 @@ var DefaultChannelTimeouts = ChannelTimeouts{
 func DialChannelWithClient(endpoint string, config *tls.Config, groupID int) (*Connection, error) {
 	initctx := context.Background()
 	return newClient(initctx, func(context.Context) (ServerCodec, error) {
-		conn, err := tls.Dial("tcp", endpoint, config)
+		dialFunc := func() (net.Conn, error) {
+			return tls.Dial("tcp", endpoint, config)
+		}
+		conn, err := dialFunc()
 		if err != nil {
 			return nil, err
 		}
@@ -340,7 +345,38 @@ func DialChannelWithClient(endpoint string, config *tls.Config, groupID int) (*C
 			asyncHandlers:       make(map[string]func(*types.Receipt, error)),
 			blockNotifyHandlers: make(map[uint64]func(int64)),
 			nodeInfo:            nodeInfo{blockNumber: 0, Protocol: 1}, closed: make(chan interface{}), endpoint: endpoint,
-			tlsConfig: config}
+			dialFunc: dialFunc}
+		go ch.processMessages()
+		if err = ch.handshakeChannel(); err != nil {
+			fmt.Printf("handshake channel protocol failed, use default protocol version")
+		}
+		ch.topicHandlers[blockNotifyPrefix+strconv.Itoa(groupID)] = nil
+		if err = ch.sendSubscribedTopics(); err != nil {
+			return nil, fmt.Errorf("subscriber block nofity failed")
+		}
+		return ch, nil
+	})
+}
+
+// DialChannelWithClient creates a new RPC client that connects to an RPC server over Channel
+// using the provided Channel Client.
+func DialSMChannelWithClient(endpoint string, config *gmtls.Config, groupID int) (*Connection, error) {
+	initctx := context.Background()
+	return newClient(initctx, func(context.Context) (ServerCodec, error) {
+
+		dialFunc := func() (net.Conn, error) {
+			return gmtls.Dial("tcp", endpoint, config)
+		}
+		conn, err := dialFunc()
+		if err != nil {
+			return nil, err
+		}
+		ch := &channelSession{c: conn, responses: make(map[string]*channelResponse),
+			receiptResponses: make(map[string]*channelResponse), topicHandlers: make(map[string]func([]byte, *[]byte)),
+			asyncHandlers:       make(map[string]func(*types.Receipt, error)),
+			blockNotifyHandlers: make(map[uint64]func(int64)),
+			nodeInfo:            nodeInfo{blockNumber: 0, Protocol: 1}, closed: make(chan interface{}), endpoint: endpoint,
+			dialFunc: dialFunc}
 		go ch.processMessages()
 		if err = ch.handshakeChannel(); err != nil {
 			fmt.Printf("handshake channel protocol failed, use default protocol version")
@@ -932,7 +968,7 @@ func (hc *channelSession) processMessages() {
 			hc.asyncMu.Unlock()
 			// re-connect network
 			for {
-				con, err := tls.Dial("tcp", hc.endpoint, hc.tlsConfig)
+				con, err := hc.dialFunc()
 				if err != nil {
 					continue
 				}

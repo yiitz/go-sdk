@@ -63,7 +63,11 @@ func DialContext(ctx context.Context, config *conf.Config) (*Client, error) {
 	if config.IsHTTP {
 		c, err = conn.DialContextHTTP(config.NodeURL)
 	} else {
-		c, err = conn.DialContextChannel(config.NodeURL, config.CAFile, config.Cert, config.Key, config.GroupID)
+		if config.IsSMChannel {
+			c, err = conn.DialContextSMChannel(config.NodeURL, config.CAFile, config.Cert, config.Key, config.GroupID)
+		} else {
+			c, err = conn.DialContextChannel(config.NodeURL, config.CAFile, config.Cert, config.Key, config.GroupID)
+		}
 	}
 	if err != nil {
 		return nil, err

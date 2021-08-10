@@ -33,6 +33,8 @@ import (
 	"github.com/FISCO-BCOS/crypto/tls"
 	"github.com/FISCO-BCOS/crypto/x509"
 	"github.com/FISCO-BCOS/go-sdk/core/types"
+	"github.com/tjfoc/gmsm/sm2"
+	"github.com/tjfoc/gmtls"
 )
 
 var (
@@ -186,6 +188,27 @@ func DialContextChannel(rawurl, caFile, certFile, keyFile string, groupID int) (
 		InsecureSkipVerify: true}
 	config.CurvePreferences = append(config.CurvePreferences, tls.CurveSecp256k1, tls.CurveP256)
 	return DialChannelWithClient(rawurl, config, groupID)
+}
+
+func DialContextSMChannel(rawurl, caFile, certFile, keyFile string, groupID int) (*Connection, error) {
+	roots := sm2.NewCertPool()
+	rootPEM, err := ioutil.ReadFile(caFile)
+	if err != nil {
+		panic(err)
+	}
+	ok := roots.AppendCertsFromPEM([]byte(rootPEM))
+	if !ok {
+		panic("failed to parse root certificate")
+	}
+	cer, err := gmtls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		// log.Println(err)
+		return nil, err
+	}
+	config := &gmtls.Config{RootCAs: roots, Certificates: []gmtls.Certificate{cer}, MinVersion: gmtls.VersionTLS12, PreferServerCipherSuites: true,
+		InsecureSkipVerify: true}
+	config.CurvePreferences = append(config.CurvePreferences, gmtls.X25519, gmtls.CurveP256, gmtls.CurveP384, gmtls.CurveP521, gmtls.CureP256SM2)
+	return DialSMChannelWithClient(rawurl, config, groupID)
 }
 
 // ClientFromContext Connection retrieves the client from the context, if any. This can be used to perform

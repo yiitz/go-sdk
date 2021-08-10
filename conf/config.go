@@ -13,15 +13,16 @@ import (
 
 // Config contains configuration items for sdk
 type Config struct {
-	IsHTTP     bool
-	ChainID    int64
-	CAFile     string
-	Key        string
-	Cert       string
-	IsSMCrypto bool
-	PrivateKey []byte
-	GroupID    int
-	NodeURL    string
+	IsHTTP      bool
+	ChainID     int64
+	CAFile      string
+	Key         string
+	Cert        string
+	IsSMCrypto  bool
+	IsSMChannel bool
+	PrivateKey  []byte
+	GroupID     int
+	NodeURL     string
 }
 
 // ParseConfigFile parses the configuration from toml config file
@@ -110,6 +111,9 @@ func ParseConfig(buffer []byte) ([]Config, error) {
 		config.CAFile = viper.GetString("Network.CAFile")
 		config.Key = viper.GetString("Network.Key")
 		config.Cert = viper.GetString("Network.Cert")
+		if viper.IsSet("Network.SMSSL") {
+			config.IsSMChannel = viper.GetBool("Network.SMSSL")
+		}
 		var connections []struct {
 			GroupID int
 			NodeURL string
